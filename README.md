@@ -32,10 +32,10 @@ Do analysis and generate insights into food wastage patterns.
 Develop a Streamlit-based interface for food providers and seekers.
 
 ## Dataset
-1) Providers Dataset : ![providers_data.csv](https://github.com/profitter261/Local-Food-Wastage-ManagementSystem/blob/main/providers_data.csv)
-3) Receivers Dataset: ![receivers_data.csv](https://github.com/profitter261/Local-Food-Wastage-Management-System/blob/main/receivers_data.csv)
-2) Food Listings Dataset: ![food_listings_data.csv](https://github.com/profitter261/Local-Food-Wastage-Management-System/blob/main/food_listings_data.csv)
-4) Claims Dataset: ![claims_data.csv](https://github.com/profitter261/Local-Food-Wastage-Management-System/blob/main/claims_data.csv)
+1) Providers Dataset : [providers_data.csv](https://github.com/profitter261/Local-Food-Wastage-ManagementSystem/blob/main/providers_data.csv)
+3) Receivers Dataset: [receivers_data.csv](https://github.com/profitter261/Local-Food-Wastage-Management-System/blob/main/receivers_data.csv)
+2) Food Listings Dataset: [food_listings_data.csv](https://github.com/profitter261/Local-Food-Wastage-Management-System/blob/main/food_listings_data.csv)
+4) Claims Dataset: [claims_data.csv](https://github.com/profitter261/Local-Food-Wastage-Management-System/blob/main/claims_data.csv)
 
 ## Results
 1) A fully functional Streamlit app that allows users to:
