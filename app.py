@@ -1,49 +1,24 @@
+# streamlit_foodshare_app.py
 import streamlit as st
 import pandas as pd
 import os
-from pandasql import sqldf
-import plotly.express as px
 import sqlite3
-import pandas as pd
+import plotly.express as px
 import matplotlib.pyplot as plt
-import seaborn as sns
-
-st.markdown("""
-    <style>
-    /* Outer container hover and border gradient */
-    .main {
-        border: 6px solid;
-        border-image: linear-gradient(to right, red, green, blue) 1;
-        border-radius: 15px;
-        padding: 15px;
-        transition: all 0.3s ease-in-out;
-    }
-
-    .main:hover {
-        box-shadow: 0 0 25px rgba(255, 0, 255, 0.5);
-        transform: scale(1.01);
-    }
-
-    /* Optional: Background and smoother font */
-    body {
-        background: linear-gradient(to right, #f7f7f7, #ffffff);
-        font-family: 'Segoe UI', sans-serif;
-    }
-    </style>
-""", unsafe_allow_html=True)
+from datetime import datetime
 
 st.set_page_config(page_title="Food Sharing App", layout="wide")
 
-# Sidebar Navigation
-st.sidebar.title("Navigation")
-choice = st.sidebar.radio("Go to", ["Project Introduction", "Dataset Description", "CRUD operations", "SQL Queries", "Learner SQL queries", "User Introduction"])
-
-# Datasets and Description
+# ---------------------
+# Configuration
+# ---------------------
+# Map friendly dataset names to CSV file paths used throughout the app
 DATASETS = {
     "Providers": "providers_data.csv",
     "Receivers": "receivers_data.csv",
     "Foodlisting": "food_listings_data.csv",
-    "Claims": "claims_data.csv"
+    "Claims": "claims_data.csv",
+    "ClaimsWithDateTime": "claims_with_date_time (1).csv"
 }
 
 DATASET_DESCRIPTIONS = {
@@ -90,23 +65,62 @@ The `claims.csv` file contains claim records.
 """
 }
 
-# Load CSV into DataFrame
+# ---------------------
+# Helpers
+# ---------------------
 def load_data(file_path):
+    """Load CSV if exists, return DataFrame (empty DF if missing)."""
     if os.path.exists(file_path):
-        return pd.read_csv(file_path)
-    return pd.DataFrame()
+        try:
+            return pd.read_csv(file_path)
+        except Exception as e:
+            st.error(f"Error reading {file_path}: {e}")
+            return pd.DataFrame()
+    else:
+        return pd.DataFrame()
 
-# Save DataFrame back to CSV
 def save_data(file_path, df):
-    df.to_csv(file_path, index=False)
+    """Save DataFrame to CSV (create directories if needed)."""
+    try:
+        df.to_csv(file_path, index=False)
+    except Exception as e:
+        st.error(f"Error saving to {file_path}: {e}")
 
-# Dynamic input form
-def input_form(columns):
+def input_form(columns, prefix="new"):
+    """Return dictionary of text inputs for each column name."""
     new_data = {}
     for col in columns:
-        new_data[col] = st.text_input(f"Enter {col}")
+        new_data[col] = st.text_input(f"Enter {col}", key=f"{prefix}_{col}")
     return new_data
 
+# ---------------------
+# Sidebar Navigation
+# ---------------------
+st.sidebar.title("Navigation")
+choice = st.sidebar.radio("Go to", [
+    "Project Introduction",
+    "Dataset Description",
+    "CRUD operations",
+    "SQL Queries",
+    "Learner SQL queries",
+    "User Introduction"
+])
+
+# Optional: Example MySQL connection (commented) - uncomment and configure if you need DB connection
+# import mysql.connector
+# try:
+#     mysql_conn = mysql.connector.connect(
+#         host="127.0.0.1",
+#         user="root",
+#         password="your_password",
+#         database="your_database_name"
+#     )
+# except Exception as e:
+#     st.warning(f"MySQL connection failed or not configured: {e}")
+
+# ---------------------
+# Pages
+# ---------------------
 if choice == "Project Introduction":
     st.title('Local Food Waste Management')
     st.write(
@@ -115,41 +129,32 @@ if choice == "Project Introduction":
 - NGOs or individuals in need can claim the food.
 - SQL stores available food details and locations.
 - A Streamlit app enables interaction, filtering, CRUD operation and visualization.""")
-    st.write(
-""" ## Business Use Cases
-- Connecting surplus food providers to those in need through a structured platform.
-- Reducing food waste by redistributing excess food efficiently.
-- Enhancing accessibility via geolocation features to locate food easily.
-- Data analysis on food wastage trends for better decision-making.""")
-    st.write(
-""" ## Tools Used
-- Python.
-- Sql Lite 3.
-- Streamlit.""")
-    st.write(
-""" ## Dataset
-- Providers Dataset : providers_data.csv
-- Receivers Dataset: receivers_data.csv
-- Food Listings Dataset: food_listings_data.csv
-- Claims Dataset: claims_data.csv""")
     
-    
+    st.write("## Tools Used")
+    st.write("- Python\n- SQLite (in-memory for queries)\n- Streamlit\n- Pandas\n- Plotly / Matplotlib")
+    st.write("## Dataset")
+    st.write("- Providers Dataset : providers_data.csv\n- Receivers Dataset: receivers_data.csv\n- Food Listings Dataset: food_listings_data.csv\n- Claims Dataset: claims_data.csv")
+
+# ---------------------
 # Dataset Description Page
+# ---------------------
 elif choice == "Dataset Description":
     st.title("📄 Dataset Description")
     selected_dataset = st.selectbox("Choose a dataset to view:", list(DATASETS.keys()), key="desc_dataset_selector")
     df = load_data(DATASETS[selected_dataset])
 
     st.markdown(f"### 🧾 Description of `{selected_dataset}`")
-    st.markdown(DATASET_DESCRIPTIONS[selected_dataset])
+    st.markdown(DATASET_DESCRIPTIONS.get(selected_dataset, "No description available."))
 
     if not df.empty:
-        st.markdown(f"### 📊 Data Preview")
+        st.markdown("### 📊 Data Preview")
         st.dataframe(df)
     else:
-        st.warning("Dataset is empty or not found.")
+        st.warning("Dataset is empty or not found. Make sure the CSV is in the app folder and has the correct filename.")
 
+# ---------------------
 # CRUD Page
+# ---------------------
 elif choice == "CRUD operations":
     dataset_name = st.selectbox("Select Dataset", list(DATASETS.keys()), key="crud_dataset_selector")
     st.title("🛠️ CSV CRUD Operations")
@@ -164,947 +169,422 @@ elif choice == "CRUD operations":
     # Create
     st.markdown("### ➕ Add New Entry")
     if not df.empty:
-        new_data = input_form(df.columns)
+        new_data = input_form(df.columns, prefix="add")
         if st.button("Add Entry"):
-            if all(value.strip() != "" for value in new_data.values()):
+            # require non-empty values
+            if all(str(value).strip() != "" for value in new_data.values()):
                 df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
                 save_data(csv_file, df)
                 st.success("✅ Entry added successfully!")
-                st.rerun()
+                st.experimental_rerun()
             else:
                 st.warning("Please fill all fields before adding.")
+    else:
+        st.info("Dataset is empty or missing. To create entries you should place a CSV with header columns or create a CSV manually.")
 
     # Update
-    st.markdown("### ✏ Update Entry")
     if not df.empty:
+        st.markdown("### ✏ Update Entry")
         selected_index = st.number_input("Row index to update", min_value=0, max_value=len(df)-1, step=1)
         updated_data = {}
         for col in df.columns:
             updated_data[col] = st.text_input(f"{col} (current: {df.loc[selected_index, col]})", key=f"upd_{col}")
         if st.button("Update Entry"):
             for col in df.columns:
+                # only update if input not empty (allow blank to overwrite if desired)
                 df.at[selected_index, col] = updated_data[col]
             save_data(csv_file, df)
             st.success("✅ Entry updated successfully!")
-            st.rerun()
+            st.experimental_rerun()
 
     # Delete
-    st.markdown("### ❌ Delete Entry")
     if not df.empty:
-        delete_index = st.number_input("Row index to delete", min_value=0, max_value=len(df)-1, step=1)
+        st.markdown("### ❌ Delete Entry")
+        delete_index = st.number_input("Row index to delete", min_value=0, max_value=len(df)-1, step=1, key="del_idx")
         if st.button("Delete Entry"):
             df = df.drop(delete_index).reset_index(drop=True)
             save_data(csv_file, df)
             st.success("✅ Entry deleted successfully!")
-            st.rerun()
+            st.experimental_rerun()
 
-# Explore Page
+# ---------------------
+# SQL Queries / Explore Page
+# ---------------------
 elif choice == "SQL Queries":
-    
-    food_listings = pd.read_csv("food_listings_data.csv")
-    claims = pd.read_csv("claims_data.csv")
-    claims2 = pd.read_csv("claims_with_date_time (1).csv")
-    receivers = pd.read_csv("receivers_data.csv")
-    providers = pd.read_csv("providers_data.csv")
-    
+    # Load CSVs
+    food_listings = load_data(DATASETS["Foodlisting"])
+    claims = load_data(DATASETS["Claims"])
+    # load optional claims with detailed datetime if present
+    claims2 = load_data(DATASETS.get("ClaimsWithDateTime", "claims_with_date_time (1).csv"))
+    receivers = load_data(DATASETS["Receivers"])
+    providers = load_data(DATASETS["Providers"])
+
     # Setup SQLite in-memory DB
-    conn = sqlite3.connect(":memory:")
+    sql_conn = sqlite3.connect(":memory:")
 
-# Push CSVs to SQLite tables
-    food_listings.to_sql("food_listings", conn, index=False, if_exists='replace')
-    claims.to_sql("claims", conn, index=False, if_exists='replace')
-    claims2.to_sql("claims2", conn, index = False, if_exists = 'replace')
-    receivers.to_sql("receivers", conn, index=False, if_exists='replace')
-    providers.to_sql("providers", conn, index=False, if_exists='replace')
+    # Push CSVs to SQLite tables (only those that are non-empty)
+    if not food_listings.empty:
+        food_listings.to_sql("food_listings", sql_conn, index=False, if_exists='replace')
+    else:
+        st.warning("food_listings_data.csv is empty or missing — some queries will not work.")
 
-# Title
+    if not claims.empty:
+        claims.to_sql("claims", sql_conn, index=False, if_exists='replace')
+
+    if not claims2.empty:
+        claims2.to_sql("claims2", sql_conn, index=False, if_exists='replace')
+
+    if not receivers.empty:
+        receivers.to_sql("receivers", sql_conn, index=False, if_exists='replace')
+
+    if not providers.empty:
+        providers.to_sql("providers", sql_conn, index=False, if_exists='replace')
+
     st.title("Food Distribution Dashboard")
-
-# Sidebar option menu
     option = st.sidebar.selectbox("Select a query to run:", (
-    "Food providers and recievers by city",
-    "Maximum Contributor/Provider",
-    "Provider's contact information",
-    "Recievers with most Food Claims",
-    "total food available from providers",
-    "Highest Food Listings",
-    "commonly available Food",
-    "Total food claims per food item",
-    "provider with high number of succesful claims",
-    "percentage of food claim status",
-    "average quantity of food claims per reciever",
-    "most claimed meal type",
-    "food donated by each provider",
-    "fast expiring products",
-    "faster claim rate",
+        "Food providers and recievers by city",
+        "Maximum Contributor/Provider",
+        "Provider's contact information",
+        "Recievers with most Food Claims",
+        "total food available from providers",
+        "Highest Food Listings",
+        "commonly available Food",
+        "Total food claims per food item",
+        "provider with high number of succesful claims",
+        "percentage of food claim status",
+        "average quantity of food claims per reciever",
+        "most claimed meal type",
+        "food donated by each provider",
+        "fast expiring products",
+        "faster claim rate",
     ))
 
-# Option 1: Food providers by city
+    # Example option: providers & receivers by city
     if option == "Food providers and recievers by city":
         st.subheader("City-wise Count of Providers and Receivers")
+        # guard for missing tables
+        try:
+            df_providers = pd.read_sql_query("SELECT City, COUNT(*) AS number_of_providers FROM providers GROUP BY City", sql_conn)
+            df_receivers = pd.read_sql_query("SELECT City, COUNT(*) AS number_of_receivers FROM receivers GROUP BY City", sql_conn)
+            col1, spacer, col2 = st.columns([1, 0.2, 1])
+            with col1:
+                st.markdown("#### Providers by City")
+                st.dataframe(df_providers)
+            with col2:
+                st.markdown("#### Receivers by City")
+                st.dataframe(df_receivers)
+        except Exception as e:
+            st.error(f"Query failed — check the CSVs are present and have expected columns. Error: {e}")
 
-    # SQL queries
-        query_providers = "SELECT count(Type) number_of_providers FROM providers group by City"
-        query_receivers = "SELECT count(Type) number_of_receivers FROM receivers group by City"
-
-    # Fetch data
-        df_providers = pd.read_sql_query(query_providers, conn)
-        df_receivers = pd.read_sql_query(query_receivers, conn)
-        col1, spacer, col2 = st.columns([1, 0.2, 1])
-        
-        st.markdown("""
-    <style>
-        /* Metric cards */
-        .metric-card {
-            padding: 1rem;
-            border-radius: 10px;
-            box-shadow: 2px 2px 6px rgba(0,0,0,0.3);
-        }
-    </style>
-""", unsafe_allow_html=True)
-        
-        with col1:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("City-wise Count of Providers", int(len(df_providers)))
-            st.markdown('</div>', unsafe_allow_html=True)
-        with spacer:
-            st.write("")  # Acts as a spacer
-        with col2:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.metric("City-wise Count of Receivers", int(len(df_receivers)))
-            st.markdown('</div>', unsafe_allow_html=True)
-        
+    # Maximum Contributor/Provider
     if option == "Maximum Contributor/Provider":
-        # Fetch distinct provider types for filter
-        provider_names = pd.read_sql_query("SELECT DISTINCT Type FROM providers", conn)
-        selected_provider = st.selectbox("Filter by Provider Type", ["All"] + provider_names['Type'].dropna().tolist())
+        try:
+            provider_names = pd.read_sql_query("SELECT DISTINCT Type FROM providers", sql_conn) if not providers.empty else pd.DataFrame()
+            selected_provider = st.selectbox("Filter by Provider Type", ["All"] + provider_names['Type'].dropna().tolist() if not provider_names.empty else ["All"])
+            if selected_provider != "All":
+                query_max = f"""
+                    SELECT Type, COUNT(Type) AS provider_type
+                    FROM providers
+                    WHERE Type = ?
+                    GROUP BY Type
+                    ORDER BY provider_type DESC
+                """
+                df_max = pd.read_sql_query(query_max, sql_conn, params=(selected_provider,))
+            else:
+                query_max = """
+                    SELECT Type, COUNT(Type) AS provider_type
+                    FROM providers
+                    GROUP BY Type
+                    ORDER BY provider_type DESC
+                """
+                df_max = pd.read_sql_query(query_max, sql_conn)
+            if not df_max.empty:
+                st.metric("Top Provider Type", df_max['Type'].iloc[0])
+                st.dataframe(df_max)
+                st.bar_chart(data=df_max.set_index('Type'))
+            else:
+                st.warning("No provider data available.")
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-    # SQL query with optional filter
-        if selected_provider != "All":
-            query_max = f"""
-        SELECT Type, COUNT(Type) AS provider_type
-        FROM providers
-        WHERE Type = '{selected_provider}'
-        GROUP BY Type
-        ORDER BY provider_type DESC
-        """
-        else:
-            query_max = """
-        SELECT Type, COUNT(Type) AS provider_type
-        FROM providers
-        GROUP BY Type
-        ORDER BY provider_type DESC
-        """
-
-    # Fetch data
-        df_max = pd.read_sql_query(query_max, conn)
-
-    # Custom CSS
-        st.markdown("""
-        <style>
-            .metric-card {
-                padding: 20px;
-                border-radius: 15px;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-                margin-bottom: 20px;
-            }
-            .metric-title {
-                font-size: 22px;
-                font-weight: bold;
-                margin-bottom: 10px;
-            }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # Metric Title
-        if not df_max.empty:
-            st.metric("Top Provider Type", df_max['Type'].iloc[0])
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.warning("No data available for the selected provider.")
-
-    # Layout: DataFrame and Bar Chart Side-by-Side
-        col1, col2 = st.columns([1, 1])
-
-        with col1:
-            with st.container():
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                st.markdown('<div class="metric-title">Provider Type Counts</div>', unsafe_allow_html=True)
-                st.dataframe(df_max, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        with col2:
-            with st.container():
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                st.markdown('<div class="metric-title">Provider Type Bar Chart</div>', unsafe_allow_html=True)
-                if not df_max.empty:
-                    st.bar_chart(df_max, x="Type", y="provider_type")
-                else:
-                    st.info("No data to show in chart.")
-                st.markdown('</div>', unsafe_allow_html=True)
-        
+    # Provider's contact information
     if option == "Provider's contact information":
-        st.subheader("Provider's contact information")
-        
-        # SQL queries
-        query_contact = "SELECT City, Contact from providers group by City"
-        
-        # Fetch data
-        df_contact = pd.read_sql_query(query_contact, conn)
-        cities = st.multiselect("Select Cities", df_contact['City'].unique())
-        filtered_df = df_contact[df_contact['City'].isin(cities)]
-        st.dataframe(filtered_df)
-    
+        try:
+            df_contact = pd.read_sql_query("SELECT City, Contact FROM providers GROUP BY City", sql_conn)
+            cities = st.multiselect("Select Cities", df_contact['City'].unique() if not df_contact.empty else [])
+            if cities:
+                filtered_df = df_contact[df_contact['City'].isin(cities)]
+            else:
+                filtered_df = df_contact
+            st.dataframe(filtered_df)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
+
+    # Recievers with most Food Claims (example simplified)
     if option == "Recievers with most Food Claims":
-        st.markdown("### 🔍 Filter Receivers by Type")
-        type_options = pd.read_sql_query("SELECT DISTINCT Type FROM receivers", conn)['Type'].tolist()
-        selected_types = st.multiselect("Select Receiver Types", type_options, default=type_options)
-
-# --- SQL query with WHERE clause if filter applied ---
-        if selected_types:
-            placeholders = ','.join(['?'] * len(selected_types))
-            query_reciever_max = f"SELECT Type, count(*) AS reciever_count FROM receivers WHERE Type IN ({placeholders}) GROUP BY Type"
-            df_r_max = pd.read_sql_query(query_reciever_max, conn, params=selected_types)
-        else:
-            query_reciever_max = "SELECT Type, count(*) AS reciever_count FROM receivers GROUP BY Type"
-            df_r_max = pd.read_sql_query(query_reciever_max, conn)
-
-# --- Metric Section ---
-        total_receivers = df_r_max['reciever_count'].sum()
-        
-
-# --- Layout with Chart and Table ---
-        col1, spacer, col2 = st.columns([1, 0.2, 1])
-
-        with col1:
-            st.markdown("#### 📊 Receiver Type Counts")
+        try:
+            if 'receivers' in sql_conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
+                # Use receivers table counts by Type
+                df_r_max = pd.read_sql_query("SELECT Type, COUNT(*) AS reciever_count FROM receivers GROUP BY Type", sql_conn)
+            else:
+                df_r_max = pd.DataFrame()
             st.dataframe(df_r_max)
+            if not df_r_max.empty:
+                st.bar_chart(data=df_r_max.set_index('Type'))
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-        with spacer:
-            st.write("")  # Acts as spacer
-
-        with col2:
-            st.markdown("#### 📈 Bar Chart")
-            st.bar_chart(df_r_max, x="Type", y="reciever_count")
-
-    
+    # total food available from providers
     if option == "total food available from providers":
-        st.markdown("### 🔍 Filter by Provider Type")
-        provider_options = pd.read_sql_query("SELECT DISTINCT Provider_Type FROM food_listings", conn)['Provider_Type'].tolist()
-        selected_providers = st.multiselect("Select Provider Types", provider_options, default=provider_options)
-
-# --- SQL query with WHERE clause if filters are selected ---
-        if selected_providers:
-            placeholders = ','.join(['?'] * len(selected_providers))
-            query_provider_max = f"""
-        SELECT Provider_Type AS provider, SUM(Quantity) AS Quantity
-        FROM food_listings
-        WHERE Provider_Type IN ({placeholders})
-        GROUP BY Provider_Type
-    """
-            df_r_max = pd.read_sql_query(query_provider_max, conn, params=selected_providers)
-        else:
-            query_provider_max = """
-        SELECT Provider_Type AS provider, SUM(Quantity) AS Quantity
-        FROM food_listings
-        GROUP BY Provider_Type
-    """
-            df_r_max = pd.read_sql_query(query_provider_max, conn)
-
-# --- Metric Display ---
-        st.metric("Total Providers Quantity:", int(df_r_max['Quantity'].sum()))
-
-# --- Layout: Table + Chart ---
-        col1, spacer, col2 = st.columns([1, 0.2, 1])
-
-        with col1:
-            st.markdown("#### 🧾 Provider-wise Quantity")
+        try:
+            df_r_max = pd.read_sql_query("""
+                SELECT Provider_Type AS provider, SUM(Quantity) AS Quantity
+                FROM food_listings
+                GROUP BY Provider_Type
+            """, sql_conn)
+            st.metric("Total Providers Quantity:", int(df_r_max['Quantity'].sum()) if not df_r_max.empty else 0)
             st.dataframe(df_r_max)
+            if not df_r_max.empty:
+                st.bar_chart(data=df_r_max.set_index('provider'))
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-        with spacer:
-            st.write("")
-
-        with col2:
-            st.markdown("#### 📊 Bar Chart")
-            st.bar_chart(data=df_r_max, x="provider", y="Quantity")
-        
-        
+    # Highest Food Listings
     if option == "Highest Food Listings":
-        st.subheader("Highest Food Listings")
-          
-        # SQL queries
-        query_reciever_max = "SELECT Location, count(Food_Name) food_list FROM food_listings group by Location order by food_list desc"
-        # Fetch data
-        df_r_max = pd.read_sql_query(query_reciever_max, conn)
-        st.metric("Total Providers Quantity:", df_r_max['Location'][0])
-        st.dataframe(df_r_max)
-        
+        try:
+            df_r_max = pd.read_sql_query("SELECT Location, COUNT(Food_Name) AS food_list FROM food_listings GROUP BY Location ORDER BY food_list DESC", sql_conn)
+            if not df_r_max.empty:
+                st.metric("Top Location (by listings)", df_r_max['Location'].iloc[0])
+            st.dataframe(df_r_max)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
+
+    # commonly available Food
     if option == "commonly available Food":
-        
-        st.markdown("### 🔍 Filter by Food Types")
-
-# Get distinct food types
-        food_type_options = pd.read_sql_query("SELECT DISTINCT Food_Type FROM food_listings", conn)['Food_Type'].dropna().tolist()
-
-# Multiselect widget
-        selected_food_types = st.multiselect("Select Food Types", food_type_options, default=food_type_options)
-
-# SQL query with optional filtering
-        if selected_food_types:
-            placeholders = ','.join(['?'] * len(selected_food_types))
-            query_food_types = f"""
-        SELECT Food_Type, COUNT(Food_Type) AS avail_food_type
-        FROM food_listings
-        WHERE Food_Type IN ({placeholders})
-        GROUP BY Food_Type
-        ORDER BY avail_food_type DESC
-    """
-            df_food_types = pd.read_sql_query(query_food_types, conn, params=selected_food_types)
-        else:
-            query_food_types = """
-        SELECT Food_Type, COUNT(Food_Type) AS avail_food_type
-        FROM food_listings
-        GROUP BY Food_Type
-        ORDER BY avail_food_type DESC
-    """
-            df_food_types = pd.read_sql_query(query_food_types, conn)
-
-# Display metrics
-        if not df_food_types.empty:
-            st.metric("Most Available Food Type", df_food_types["Food_Type"].iloc[0])
-        else:
-            st.warning("No food data available.")
-
-# Display data
-        st.dataframe(df_food_types)
-        chart_type = st.radio("Choose Chart Type", ["Pie Chart", "Bar Chart"])
-        if not df_food_types.empty:
-            st.markdown("#### 📊 Food Type Distribution")
-
-            if chart_type == "Pie Chart":
-                fig, ax = plt.subplots(figsize=(10, 6))
-                ax.pie(df_food_types["avail_food_type"],
-                labels=df_food_types["Food_Type"],
-                autopct='%1.1f%%',
-                startangle=90,
-                textprops={'fontsize': 10})
-                ax.axis("equal")
-                st.pyplot(fig)
-
-            elif chart_type == "Bar Chart":
-            
-                bar_fig = px.bar(df_food_types,
-                         x="Food_Type",
-                         y="avail_food_type",
-                         color="Food_Type",
-                         title="Available Food Types",
-                         labels={"avail_food_type": "Count"})
-                st.plotly_chart(bar_fig, use_container_width=True)
+        try:
+            df_food_types = pd.read_sql_query("""
+                SELECT Food_Type, COUNT(Food_Type) AS avail_food_type
+                FROM food_listings
+                GROUP BY Food_Type
+                ORDER BY avail_food_type DESC
+            """, sql_conn)
+            if not df_food_types.empty:
+                st.metric("Most Available Food Type", df_food_types["Food_Type"].iloc[0])
+                st.dataframe(df_food_types)
+                chart_type = st.radio("Choose Chart Type", ["Pie Chart", "Bar Chart"])
+                if chart_type == "Pie Chart":
+                    fig, ax = plt.subplots(figsize=(8, 5))
+                    ax.pie(df_food_types["avail_food_type"], labels=df_food_types["Food_Type"], autopct='%1.1f%%', startangle=90)
+                    ax.axis("equal")
+                    st.pyplot(fig)
+                else:
+                    fig = px.bar(df_food_types, x="Food_Type", y="avail_food_type", labels={"avail_food_type":"Count"})
+                    st.plotly_chart(fig, use_container_width=True)
             else:
-                st.warning("No data available for selected filters.")
+                st.warning("No food data available.")
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-        
+    # total food claims per food item
     if option == "Total food claims per food item":
-        st.subheader("🍽️ Total Food Claims Per Food Item")
-
-# --- SQL Query ---
-        query = """
-SELECT t3.Food_Name, COUNT(t2.Claim_ID) AS no_food_claims
-FROM food_listings t3
-JOIN claims t2 ON t2.Food_ID = t3.Food_ID
-GROUP BY t3.Food_Name
-ORDER BY no_food_claims DESC
-"""
-        df_r_max = pd.read_sql_query(query, conn)
-
-# --- Filters ---
-        food_names = df_r_max['Food_Name'].unique().tolist()
-        selected_foods = st.multiselect("🔍 Filter by Food Item", food_names, default=food_names)
-        chart_type = st.radio("📊 Select Chart Type", ["Line Chart", "Bar Chart"], horizontal=True)
-
-# --- Filtered Data ---
-        filtered_df = df_r_max[df_r_max["Food_Name"].isin(selected_foods)]
-
-# --- Show Table ---
-        st.dataframe(filtered_df)
-        
-        if not filtered_df.empty:
-            if chart_type == "Line Chart":
-                fig = px.line(filtered_df, x='Food_Name', y='no_food_claims', markers=True,
-                title="Total Claims Per Food Item")
+        try:
+            query = """
+                SELECT f.Food_Name, COUNT(c.Claim_ID) AS no_food_claims
+                FROM food_listings f
+                JOIN claims c ON c.Food_ID = f.Food_ID
+                GROUP BY f.Food_Name
+                ORDER BY no_food_claims DESC
+            """
+            df_r_max = pd.read_sql_query(query, sql_conn)
+            if df_r_max.empty:
+                st.warning("No matching claims or food_listings data.")
             else:
-                fig = px.bar(filtered_df, x='Food_Name', y='no_food_claims',
-                title="Total Claims Per Food Item")
+                st.dataframe(df_r_max)
+                fig = px.bar(df_r_max, x='Food_Name', y='no_food_claims', title="Total Claims Per Food Item")
+                fig.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-            fig.update_layout(xaxis_title="Food Name", yaxis_title="Number of Claims", xaxis_tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No data to display. Please select at least one food item.")
-
-
-        
+    # provider with high number of succesful claims (example)
     if option == "provider with high number of succesful claims":
-        st.subheader("Provider With High Number Of Successful Claims")
+        try:
+            df_r_max = pd.read_sql_query("""
+                SELECT Provider_Type AS Provider, SUM(Quantity) AS total_food_provided
+                FROM food_listings
+                GROUP BY Provider_Type
+            """, sql_conn)
+            st.dataframe(df_r_max)
+            if not df_r_max.empty:
+                fig = px.bar(df_r_max, x='Provider', y='total_food_provided', title='Total Food Quantity Provided by Each Provider Type')
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-# SQL query
-        query_reciever_max = """
-    SELECT Provider_Type AS Provider, SUM(Quantity) AS total_food_provided 
-    FROM food_listings 
-    GROUP BY Provider_Type
-"""
-# Fetch data
-        df_r_max = pd.read_sql_query(query_reciever_max, conn)
-        st.dataframe(df_r_max)
-
-# Filter: Provider Type
-        provider_options = df_r_max['Provider'].unique().tolist()
-        selected_providers = st.multiselect("📌 Filter by Provider Type", provider_options, default=provider_options)
-
-# Filter the DataFrame
-        filtered_df = df_r_max[df_r_max['Provider'].isin(selected_providers)]
-
-# Plotly Bar Chart
-        if not filtered_df.empty:
-            fig = px.bar(
-        filtered_df,
-        x='Provider',
-        y='total_food_provided',
-        text='total_food_provided',
-        title='Total Food Quantity Provided by Each Provider Type',
-        labels={'total_food_provided': 'Total Food Quantity'},
-        color='Provider'
-    )
-            fig.update_traces(texttemplate='%{text:.2s}', textposition='outside')
-            fig.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No data to display. Please select at least one provider type.")
-
-        
+    # percentage of food claim status
     if option == "percentage of food claim status":
-        st.subheader("Percentage Of Food Claim Status")
+        try:
+            df_r_max = pd.read_sql_query("""
+                SELECT Status, COUNT(*) * 100.0 / (SELECT COUNT(*) FROM claims) AS percentage
+                FROM claims
+                GROUP BY Status
+            """, sql_conn)
+            st.dataframe(df_r_max)
+            if not df_r_max.empty:
+                fig = px.pie(df_r_max, values='percentage', names='Status', title='Food Claim Status Distribution (%)', hole=0.4)
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-# SQL query
-        query_reciever_max = """
-    SELECT Status, COUNT(*) * 100.0 / (SELECT COUNT(*) FROM claims) AS percentage 
-    FROM claims 
-    GROUP BY Status
-"""
-# Fetch data
-        df_r_max = pd.read_sql_query(query_reciever_max, conn)
-        st.dataframe(df_r_max)
-
-# Optional: Status filter
-        status_options = df_r_max['Status'].unique().tolist()
-        selected_statuses = st.multiselect("🎯 Filter by Claim Status", status_options, default=status_options)
-
-# Filter DataFrame
-        filtered_df = df_r_max[df_r_max['Status'].isin(selected_statuses)]
-
-# Plotly Pie Chart
-        if not filtered_df.empty:
-            fig = px.pie(
-        filtered_df,
-        values='percentage',
-        names='Status',
-        title='Food Claim Status Distribution (%)',
-        hole=0.4
-    )
-            fig.update_traces(textinfo='percent+label')
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No data to display. Please select at least one claim status.")
-        
-    if option == "average quantity of food claims per reciever":
-        st.subheader("Average Quantity Of Food Claims Per Receiver")
-
-# SQL query
-        query_reciever_max = """
-    SELECT t3.Food_Name, COUNT(t2.Claim_ID) AS no_food_claims 
-    FROM food_listings t3 
-    JOIN claims t2 ON t2.Food_ID = t3.Food_ID 
-    GROUP BY t3.Food_Name 
-    ORDER BY no_food_claims DESC
-"""
-
-# Fetch data
-        df_r_max = pd.read_sql_query(query_reciever_max, conn)
-        st.dataframe(df_r_max)
-
-# Filter: Food selection
-        food_options = df_r_max['Food_Name'].unique().tolist()
-        selected_foods = st.multiselect("🍽️ Filter by Food Name", food_options, default=food_options)
-
-# Filter the data based on selection
-        filtered_df = df_r_max[df_r_max['Food_Name'].isin(selected_foods)]
-
-# Plot with Plotly
-        if not filtered_df.empty:
-            fig = px.bar(
-        filtered_df,
-        x="Food_Name",
-        y="no_food_claims",
-        title="Average Quantity of Food Claims per Receiver",
-        labels={"no_food_claims": "Number of Claims", "Food_Name": "Food"},
-        color="no_food_claims",
-        color_continuous_scale="viridis"
-    )
-            fig.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No data to display. Please select at least one food item.")
-        
-    if option == "most claimed meal type":
-        st.subheader("Most Claimed Meal Type")
-
-# SQL query
-        query_meal_claims = """
-    SELECT t3.Meal_Type, COUNT(t2.Status) AS no_of_claims 
-    FROM food_listings t3 
-    JOIN claims t2 ON t2.Food_ID = t3.Food_ID 
-    WHERE t2.Status = 'Completed' 
-    GROUP BY t3.Meal_Type 
-    ORDER BY no_of_claims DESC
-"""
-
-# Fetch data
-        df_meal_claims = pd.read_sql_query(query_meal_claims, conn)
-        st.dataframe(df_meal_claims)
-
-# Filter: Meal Type multiselect
-        meal_type_options = df_meal_claims['Meal_Type'].unique().tolist()
-        selected_meal_types = st.multiselect("🍴 Filter by Meal Type", meal_type_options, default=meal_type_options)
-
-# Apply filter
-        filtered_meal_df = df_meal_claims[df_meal_claims['Meal_Type'].isin(selected_meal_types)]
-
-# Plot with Plotly
-        if not filtered_meal_df.empty:
-            fig = px.bar(
-        filtered_meal_df,
-        x="Meal_Type",
-        y="no_of_claims",
-        title="Most Claimed Meal Type (Completed Only)",
-        labels={"no_of_claims": "Number of Claims", "Meal_Type": "Meal Type"},
-        color="no_of_claims",
-        color_continuous_scale="plasma"
-    )
-            fig.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No data to display. Please select at least one meal type.")
-        
-    if option == "food donated by each provider":
-        st.subheader("🍲 Food Donated by Each Provider")
-
-# SQL query
-        query_provider_food = """
-    SELECT Provider_Type AS Provider, SUM(Quantity) AS total_food_provided 
-    FROM food_listings 
-    GROUP BY Provider_Type
-"""
-# Fetch data
-        df_provider = pd.read_sql_query(query_provider_food, conn)
-        st.dataframe(df_provider)
-
-# Filter: Provider multiselect
-        provider_options = df_provider['Provider'].unique().tolist()
-        selected_providers = st.multiselect("🏢 Filter by Provider Type", provider_options, default=provider_options)
-
-# Apply filter
-        filtered_df = df_provider[df_provider['Provider'].isin(selected_providers)]
-
-# Plot with Plotly
-        if not filtered_df.empty:
-            fig = px.bar(
-        filtered_df,
-        x="Provider",
-        y="total_food_provided",
-        title="Total Food Donated by Provider Type",
-        labels={"total_food_provided": "Total Food Donated", "Provider": "Provider Type"},
-        color="total_food_provided",
-        color_continuous_scale="viridis"
-    )
-            fig.update_layout(xaxis_tickangle=-25)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No data to display. Please select at least one provider type.")
-        
+    # fast expiring products
     if option == "fast expiring products":
-        st.subheader("⏳ Fast Expiring Products")
+        try:
+            df_expiring = pd.read_sql_query("SELECT Food_Name, Expiry_Date FROM food_listings ORDER BY Expiry_Date ASC", sql_conn)
+            if df_expiring.empty:
+                st.warning("No expiry data available.")
+            else:
+                df_expiring["Expiry_Date"] = pd.to_datetime(df_expiring["Expiry_Date"], errors='coerce')
+                df_expiring = df_expiring.dropna(subset=["Expiry_Date"])
+                st.dataframe(df_expiring.sort_values("Expiry_Date").head(50))
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-# SQL query to get food and expiry dates
-        query_expiring = """
-    SELECT Food_Name, Expiry_Date 
-    FROM food_listings 
-    ORDER BY Expiry_Date ASC
-"""
-# Fetch data
-        df_expiring = pd.read_sql_query(query_expiring, conn)
-
-# Convert Expiry_Date to datetime if not already
-        df_expiring["Expiry_Date"] = pd.to_datetime(df_expiring["Expiry_Date"])
-
-# Sidebar or main filter UI
-        food_options = df_expiring['Food_Name'].unique().tolist()
-        selected_foods = st.multiselect("🍽️ Filter by Food Name", food_options, default=food_options)
-
-# Date range filter
-        min_date = df_expiring["Expiry_Date"].min()
-        max_date = df_expiring["Expiry_Date"].max()
-        selected_date_range = st.date_input("📅 Select Expiry Date Range", [min_date, max_date])
-
-# Filter data
-        filtered_df = df_expiring[
-    (df_expiring['Food_Name'].isin(selected_foods)) &
-    (df_expiring['Expiry_Date'] >= pd.to_datetime(selected_date_range[0])) &
-    (df_expiring['Expiry_Date'] <= pd.to_datetime(selected_date_range[1]))
-]
-
-# Show filtered table
-        st.dataframe(filtered_df)
-
-# Plotly line plot
-        if not filtered_df.empty:
-            fig = px.line(
-        filtered_df.sort_values("Expiry_Date"),
-        x="Expiry_Date",
-        y=filtered_df.groupby("Expiry_Date").cumcount()+1,
-        color="Food_Name",
-        title="Fast Expiring Products Timeline",
-        labels={"y": "Product Count", "Expiry_Date": "Expiry Date"},
-        markers=True
-    )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No products found for the selected filters.")
-
-        
+    # faster claim rate (simplified safe version)
     if option == "faster claim rate":
-        import streamlit as st
-        import pandas as pd
-        import sqlite3
-        import plotly.express as px
+        try:
+            # Use claims and food_listings if available
+            if not claims.empty and not food_listings.empty:
+                merged = claims.merge(food_listings[['Food_ID', 'Location', 'Expiry_Date']], on='Food_ID', how='left')
+                merged['Timestamp'] = pd.to_datetime(merged['Timestamp'], errors='coerce')
+                merged['Expiry_Date'] = pd.to_datetime(merged['Expiry_Date'], errors='coerce')
+                merged = merged.dropna(subset=['Timestamp', 'Expiry_Date'])
+                merged['days_between'] = (merged['Expiry_Date'] - merged['Timestamp']).dt.days
+                # group by Location, take average absolute days difference
+                df_fast_claims = merged.groupby('Location', as_index=False)['days_between'].mean().rename(columns={'days_between':'avg_days_to_claim'})
+                df_fast_claims = df_fast_claims.sort_values('avg_days_to_claim')
+                st.dataframe(df_fast_claims.head(10))
+                if not df_fast_claims.empty:
+                    fig = px.bar(df_fast_claims.head(10), x='Location', y='avg_days_to_claim', title='Average Days Between Claim Timestamp and Expiry Date (by Location)')
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("Need both claims_data.csv and food_listings_data.csv for this calculation.")
+        except Exception as e:
+            st.error(f"Computation failed: {e}")
 
-        st.subheader("📦 Faster Claim Rates (Top 5 Cities)")
-
-# Load datasets
-        foodlisting = pd.read_csv('food_listings_data.csv')
-        claims = pd.read_csv('claims_data.csv')
-
-# Convert date columns
-        foodlisting['Expiry_Date'] = pd.to_datetime(foodlisting['Expiry_Date'], errors='coerce')
-        claims['Timestamp'] = pd.to_datetime(claims['Timestamp'], errors='coerce')
-
-# Drop invalid dates
-        foodlisting.dropna(subset=['Expiry_Date'], inplace=True)
-        claims.dropna(subset=['Timestamp'], inplace=True)
-
-# Optional filters for interactivity
-        status_filter = st.selectbox("Select Claim Status", options=claims['Status'].unique())
-        city_filter = st.multiselect("Filter by City (Optional)", options=foodlisting['Location'].unique())
-
-# Create in-memory SQLite DB
-        conn = sqlite3.connect(":memory:")
-        claims.to_sql('claims', conn, index=False, if_exists='replace')
-        foodlisting.to_sql('foodlisting', conn, index=False, if_exists='replace')
-
-# Build SQL with filters
-        query = f"""
-SELECT
-    f.Location AS city,
-    ROUND(MAX(AVG(julianday(c.Timestamp) - julianday(f.Expiry_Date)) * 100.0 / 30, 0), 2) AS avg_claim_time_percent
-FROM
-    foodlisting f
-JOIN
-    claims c ON f.Food_ID = c.Food_ID
-WHERE
-    c.Status = '{status_filter}'
-    {"AND f.Location IN (" + ",".join([f"'{city}'" for city in city_filter]) + ")" if city_filter else ""}
-GROUP BY
-    city
-ORDER BY
-    avg_claim_time_percent DESC
-LIMIT 5
-"""
-
-# Execute query
-        df_fast_claims = pd.read_sql_query(query, conn)
-
-# Display data
-        st.dataframe(df_fast_claims)
-
-# Plotly Chart
-        if not df_fast_claims.empty:
-            fig = px.bar(
-        df_fast_claims,
-        x="city",
-        y="avg_claim_time_percent",
-        labels={"city": "City", "avg_claim_time_percent": "Avg Claim Time (%)"},
-        title="Top 5 Cities with Fastest Claim Completion",
-        color="avg_claim_time_percent",
-        color_continuous_scale="Blues"
-    )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No data found for the selected filters.")
-
-        
+# ---------------------
+# Learner SQL queries (kept similar structure but guarded)
+# ---------------------
 elif choice == "Learner SQL queries":
-    
-    food_listings = pd.read_csv("food_listings_data.csv")
-    claims = pd.read_csv("claims_data.csv")
-    claims2 = pd.read_csv("claims_with_date_time (1).csv")
-    receivers = pd.read_csv("receivers_data.csv")
-    providers = pd.read_csv("providers_data.csv")
-    
-    # Setup SQLite in-memory DB
-    conn = sqlite3.connect(":memory:")
+    # Load CSVs and push to sqlite
+    food_listings = load_data(DATASETS["Foodlisting"])
+    claims = load_data(DATASETS["Claims"])
+    claims2 = load_data(DATASETS.get("ClaimsWithDateTime", "claims_with_date_time (1).csv"))
+    receivers = load_data(DATASETS["Receivers"])
+    providers = load_data(DATASETS["Providers"])
 
-# Push CSVs to SQLite tables
-    food_listings.to_sql("food_listings", conn, index=False, if_exists='replace')
-    claims.to_sql("claims", conn, index=False, if_exists='replace')
-    claims2.to_sql("claims2", conn, index = False, if_exists = 'replace')
-    receivers.to_sql("receivers", conn, index=False, if_exists='replace')
-    providers.to_sql("providers", conn, index=False, if_exists='replace')
+    sql_conn = sqlite3.connect(":memory:")
+    if not food_listings.empty: food_listings.to_sql("food_listings", sql_conn, index=False, if_exists='replace')
+    if not claims.empty: claims.to_sql("claims", sql_conn, index=False, if_exists='replace')
+    if not claims2.empty: claims2.to_sql("claims2", sql_conn, index=False, if_exists='replace')
+    if not receivers.empty: receivers.to_sql("receivers", sql_conn, index=False, if_exists='replace')
+    if not providers.empty: providers.to_sql("providers", sql_conn, index=False, if_exists='replace')
 
-    # Title
-    st.title("Food Distribution Dashboard")
-    
-    # Sidebar option menu
+    st.title("Learner SQL Dashboard")
     option = st.sidebar.selectbox("Select a query to run:", (
-    "Reciever share distribution of food",
-    "share percent of food provided by each provider",
-    "Succesful meal types",
-    "most providing food provider",
-    "vegan vs non veg vs veg for each meal type"
+        "Reciever share distribution of food",
+        "share percent of food provided by each provider",
+        "Succesful meal types",
+        "most providing food provider",
+        "vegan vs non veg vs veg for each meal type"
     ))
-    
+
     if option == "Reciever share distribution of food":
-        st.subheader("Receiver Share Distribution of Food")
+        try:
+            df_r_max = pd.read_sql_query("""
+                SELECT Type AS receiver_type,
+                       COUNT(*) * 100.0 / (SELECT COUNT(*) FROM receivers) AS percentage_share
+                FROM receivers
+                GROUP BY Type
+            """, sql_conn)
+            st.dataframe(df_r_max)
+            fig = px.pie(df_r_max, names='receiver_type', values='percentage_share', title='Receiver Type Share (%)')
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-# SQL query
-        query_receiver_max = """
-SELECT 
-    Type AS receiver_type,
-    COUNT(*) * 100.0 / (SELECT COUNT(*) FROM receivers) AS percentage_share 
-FROM receivers 
-GROUP BY Type
-"""
+    if option == "share percent of food provided by each provider":
+        try:
+            df_p_max = pd.read_sql_query("""
+                SELECT Type AS provider_type,
+                       COUNT(*) * 100.0 / (SELECT COUNT(*) FROM providers) AS percentage_share
+                FROM providers
+                GROUP BY Type
+            """, sql_conn)
+            st.dataframe(df_p_max)
+            fig = px.bar(df_p_max, x='provider_type', y='percentage_share', title='Provider Type Share (%)')
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-# Fetch data
-        df_r_max = pd.read_sql_query(query_receiver_max, conn)
-        st.dataframe(df_r_max)
+    if option == "Succesful meal types":
+        try:
+            df_meal_success = pd.read_sql_query("""
+                SELECT f.Meal_Type,
+                       SUM(CASE WHEN c.Status = 'Completed' THEN 1 ELSE 0 END) * 100.0 / (
+                           SELECT COUNT(*) FROM claims WHERE Status = 'Completed'
+                       ) AS success_percentage
+                FROM claims c
+                JOIN food_listings f ON c.Food_ID = f.Food_ID
+                GROUP BY f.Meal_Type
+                ORDER BY success_percentage DESC
+            """, sql_conn)
+            st.dataframe(df_meal_success)
+            fig = px.bar(df_meal_success, x='Meal_Type', y='success_percentage', title='Success Rate of Meal Types (%)')
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-# Chart type toggle
-        chart_type = st.radio("Choose Chart Type", ["Pie Chart", "Bar Chart"], key="receiver_chart")
+    if option == "most providing food provider":
+        try:
+            df_provider_success = pd.read_sql_query("""
+                SELECT f.Provider_Type,
+                       ROUND(SUM(CASE WHEN c.Status = 'Completed' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS success_rate
+                FROM food_listings f
+                JOIN claims c ON f.Food_ID = c.Food_ID
+                GROUP BY f.Provider_Type
+                ORDER BY success_rate DESC
+            """, sql_conn)
+            st.dataframe(df_provider_success)
+            fig = px.bar(df_provider_success, x='Provider_Type', y='success_rate', title='Success Rate by Provider Type (%)')
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-# Plot based on selection
-        if chart_type == "Pie Chart":
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.pie(df_r_max['percentage_share'],
-            labels=df_r_max['receiver_type'],
-            autopct='%1.1f%%',
-            startangle=90,
-            textprops={'fontsize': 10})
-            ax.axis('equal')
-            st.pyplot(fig)
+    if option == "vegan vs non veg vs veg for each meal type":
+        try:
+            df_vegan = pd.read_sql_query("SELECT Meal_Type, COUNT(*) AS count_vegan FROM food_listings WHERE Food_Type = 'Vegan' GROUP BY Meal_Type", sql_conn)
+            df_vegetarian = pd.read_sql_query("SELECT Meal_Type, COUNT(*) AS count_vegetarian FROM food_listings WHERE Food_Type = 'Vegetarian' GROUP BY Meal_Type", sql_conn)
+            df_non_veg = pd.read_sql_query("SELECT Meal_Type, COUNT(*) AS count_non_veg FROM food_listings WHERE Food_Type = 'Non-Vegetarian' GROUP BY Meal_Type", sql_conn)
 
-        elif chart_type == "Bar Chart":
-            import plotly.express as px
-            fig_bar = px.bar(df_r_max,
-                     x="receiver_type",
-                     y="percentage_share",
-                     color="receiver_type",
-                     title="Receiver Type Share (%)",
-                     labels={"receiver_type": "Receiver Type", "percentage_share": "Share (%)"})
-            st.plotly_chart(fig_bar, use_container_width=True)
+            df_merge = pd.merge(pd.merge(df_vegan, df_vegetarian, on='Meal_Type', how='outer'), df_non_veg, on='Meal_Type', how='outer').fillna(0)
+            st.dataframe(df_merge)
 
-        
-    elif option == "share percent of food provided by each provider":
-        st.subheader("Share Percent of Food Provided by Each Provider")
+            chart_type = st.radio("Select Chart Type", ["Stacked Bar", "Pie (per Meal Type)"])
+            if chart_type == "Stacked Bar":
+                fig = px.bar(df_merge, x='Meal_Type', y=['count_vegan','count_vegetarian','count_non_veg'], title='Meal Preferences by Type (Stacked)')
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                for _, row in df_merge.iterrows():
+                    fig = px.pie(names=['Vegan','Vegetarian','Non-Vegetarian'], values=[row['count_vegan'], row['count_vegetarian'], row['count_non_veg']], title=row['Meal_Type'])
+                    st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Query failed: {e}")
 
-# SQL query
-        query_provider_max = """
-SELECT 
-    Type AS provider_type,
-    COUNT(*) * 100.0 / (SELECT COUNT(*) FROM providers) AS percentage_share 
-FROM providers 
-GROUP BY Type
-"""
-
-# Fetch data
-        df_p_max = pd.read_sql_query(query_provider_max, conn)
-        st.dataframe(df_p_max)
-
-# Chart type toggle
-        chart_type = st.radio("Choose Chart Type", ["Pie Chart", "Bar Chart"], key="provider_chart")
-
-# Plot based on selection
-        if chart_type == "Pie Chart":
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.pie(df_p_max['percentage_share'],
-            labels=df_p_max['provider_type'],
-            autopct='%1.1f%%',
-            startangle=90,
-            textprops={'fontsize': 10})
-            ax.axis('equal')
-            st.pyplot(fig)
-
-        elif chart_type == "Bar Chart":
-            import plotly.express as px
-            fig_bar = px.bar(df_p_max,
-                     x="provider_type",
-                     y="percentage_share",
-                     color="provider_type",
-                     title="Provider Type Share (%)",
-                     labels={"provider_type": "Provider Type", "percentage_share": "Share (%)"})
-            st.plotly_chart(fig_bar, use_container_width=True)
-
-    
-    elif option == "Succesful meal types":
-        st.subheader("Successful Meal Types")
-
-# SQL Query
-        query_meal_success = """
-SELECT 
-    f.Meal_Type, 
-    CAST(SUM(CASE WHEN c.Status = 'Completed' THEN 1 ELSE 0 END) AS REAL) * 100 / 
-    (SELECT COUNT(*) FROM claims WHERE Status = 'Completed') AS success_percentage 
-FROM claims c 
-JOIN food_listings f ON c.Food_ID = f.Food_ID 
-GROUP BY f.Meal_Type 
-ORDER BY success_percentage DESC;
-"""
-
-# Fetch Data
-        df_meal_success = pd.read_sql_query(query_meal_success, conn)
-        st.dataframe(df_meal_success)
-
-# Chart type toggle
-        chart_type = st.radio("Choose Chart Type", ["Bar Chart", "Pie Chart"], key="meal_chart")
-
-# Plotting
-        if chart_type == "Bar Chart":
-            import plotly.express as px
-            fig_bar = px.bar(df_meal_success,
-                     x="Meal_Type",
-                     y="success_percentage",
-                     text="success_percentage",
-                     color="Meal_Type",
-                     title="Success Rate of Meal Types (%)",
-                     labels={"Meal_Type": "Meal Type", "success_percentage": "Success %"})
-            fig_bar.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig_bar.update_layout(yaxis=dict(range=[0, 100]))
-            st.plotly_chart(fig_bar, use_container_width=True)
-
-        elif chart_type == "Pie Chart":
-            fig_pie, ax = plt.subplots(figsize=(8, 6))
-            ax.pie(df_meal_success['success_percentage'],
-           labels=df_meal_success['Meal_Type'],
-           autopct='%1.1f%%',
-           startangle=90,
-           textprops={'fontsize': 10})
-            ax.axis('equal')
-            st.pyplot(fig_pie)
-
-        
-    elif option == "most providing food provider":
-        st.subheader("Successful Provider Types")
-
-# SQL Query
-        query_provider_success = """
-SELECT 
-    f.Provider_Type, 
-    ROUND(SUM(CASE WHEN c.Status = 'Completed' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS success_rate 
-FROM food_listings f 
-JOIN claims c ON f.Food_ID = c.Food_ID 
-GROUP BY f.Provider_Type 
-ORDER BY success_rate DESC;
-"""
-
-# Fetch Data
-        df_provider_success = pd.read_sql_query(query_provider_success, conn)
-        st.dataframe(df_provider_success)
-
-# Chart type toggle
-        chart_type = st.radio("Choose Chart Type", ["Pie Chart", "Bar Chart"], key="provider_chart")
-
-# Plotting based on selection
-        if chart_type == "Pie Chart":
-            fig_pie, ax = plt.subplots(figsize=(8, 6))
-            ax.pie(df_provider_success['success_rate'],
-           labels=df_provider_success['Provider_Type'],
-           autopct='%1.1f%%',
-           startangle=90,
-           textprops={'fontsize': 10})
-            ax.axis('equal')
-            st.pyplot(fig_pie)
-
-        else:  # Bar Chart
-            import plotly.express as px
-            fig_bar = px.bar(df_provider_success,
-                     x="Provider_Type",
-                     y="success_rate",
-                     text="success_rate",
-                     color="Provider_Type",
-                     title="Success Rate by Provider Type (%)",
-                     labels={"Provider_Type": "Provider Type", "success_rate": "Success %"})
-            fig_bar.update_traces(texttemplate='%{text}%', textposition='outside')
-            fig_bar.update_layout(yaxis=dict(range=[0, 100]))
-            st.plotly_chart(fig_bar, use_container_width=True)
-
-        
-    elif option == "vegan vs non veg vs veg for each meal type":
-        st.subheader("Vegan vs Non Veg vs Veg For Each Meal Type")
-
-# Queries
-        query = "SELECT Meal_Type, COUNT(Food_Type) as count_vegan FROM food_listings WHERE Food_type = 'Vegan' GROUP BY Meal_Type"
-        query1 = "SELECT Meal_Type, COUNT(Food_Type) as count_vegetarian FROM food_listings WHERE Food_type = 'Vegetarian' GROUP BY Meal_Type"
-        query2 = "SELECT Meal_Type, COUNT(Food_Type) as count_non_veg FROM food_listings WHERE Food_type = 'Non-Vegetarian' GROUP BY Meal_Type"
-
-# Fetch data
-        df_vegan = pd.read_sql_query(query, conn)
-        df_vegetarian = pd.read_sql_query(query1, conn)
-        df_non_veg = pd.read_sql_query(query2, conn)
-
-# Merge all into one DataFrame
-        df = pd.merge(pd.merge(df_vegan, df_vegetarian, on='Meal_Type', how='outer'), df_non_veg, on='Meal_Type', how='outer').fillna(0)
-
-# Show DataFrame
-        st.dataframe(df)
-
-# Select chart type
-        chart_type = st.radio("Select Chart Type", ["Stacked Bar", "Pie (per Meal Type)"])
-
-        if chart_type == "Stacked Bar":
-            fig, ax = plt.subplots(figsize=(10, 6))
-            plt.bar(df['Meal_Type'], df['count_vegan'], label='Vegan')
-            plt.bar(df['Meal_Type'], df['count_vegetarian'], bottom=df['count_vegan'], label='Vegetarian')
-            plt.bar(df['Meal_Type'], df['count_non_veg'], bottom=df['count_vegan'] + df['count_vegetarian'], label='Non-Vegetarian')
-
-            plt.xlabel('Meal Type')
-            plt.ylabel('Count')
-            plt.title('Meal Preferences by Type (Stacked)')
-            plt.legend()
-            plt.tight_layout()
-            st.pyplot(fig)
-
-        else:
-    # Pie chart for each meal type
-            for index, row in df.iterrows():
-                meal = row['Meal_Type']
-                values = [row['count_vegan'], row['count_vegetarian'], row['count_non_veg']]
-                labels = ['Vegan', 'Vegetarian', 'Non-Vegetarian']
-        
-                fig, ax = plt.subplots()
-                ax.pie(values, labels=labels, autopct='%1.1f%%')
-                ax.set_title(f"{meal} Meal Type Distribution")
-                st.pyplot(fig)
-# Contact Page
+# ---------------------
+# Contact / About
+# ---------------------
 elif choice == "User Introduction":
     st.title("About the Creator")
     st.write('Arvind S')
     st.write('phone: 9685696856')
     st.write("Email us at: support@foodshare.org")
-st.markdown("</div>", unsafe_allow_html=True)
